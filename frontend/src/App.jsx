@@ -18,6 +18,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const App = () => {
   const [names, setNames] = useState([]);
@@ -28,23 +35,8 @@ const App = () => {
     person1: "",
     person2: "",
   });
-  const [debouncedRestriction, setDebouncedRestriction] = useState({
-    person1: "",
-    person2: "",
-  });
   const [groups, setGroups] = useState([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
-
-  // Debounce effect for restriction inputs
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedRestriction(currentRestriction);
-    }, 500); // Increased to 500ms for better performance
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [currentRestriction]);
 
   // Memoized calculations for better performance
   const canGenerateGroups = useMemo(() => {
@@ -65,6 +57,15 @@ const App = () => {
     return remainder === 0 ? 0 : groupSize - remainder;
   }, [names.length, groupSize]);
 
+  // Available names for restrictions (excluding already selected ones)
+  const availableNamesForPerson1 = useMemo(() => {
+    return names.filter(name => name !== currentRestriction.person2);
+  }, [names, currentRestriction.person2]);
+
+  const availableNamesForPerson2 = useMemo(() => {
+    return names.filter(name => name !== currentRestriction.person1);
+  }, [names, currentRestriction.person1]);
+
   // Optimized addName function
   const addName = useCallback(() => {
     const trimmedName = currentName.trim().toLowerCase();
@@ -83,33 +84,36 @@ const App = () => {
         (r) => r.person1 !== nameToRemove && r.person2 !== nameToRemove
       )
     );
+    // Clear current restriction if it involves the removed person
+    setCurrentRestriction((prev) => ({
+      person1: prev.person1 === nameToRemove ? "" : prev.person1,
+      person2: prev.person2 === nameToRemove ? "" : prev.person2,
+    }));
   }, []);
 
   // Optimized addRestriction function with better validation
   const addRestriction = useCallback(() => {
-    const { person1, person2 } = debouncedRestriction;
-    const p1 = person1.trim().toLowerCase();
-    const p2 = person2.trim().toLowerCase();
-
+    const { person1, person2 } = currentRestriction;
+    
     // Enhanced validation
-    if (!p1 || !p2) return;
-    if (!names.includes(p1) || !names.includes(p2)) return;
-    if (p1 === p2) return;
+    if (!person1 || !person2) return;
+    if (!names.includes(person1) || !names.includes(person2)) return;
+    if (person1 === person2) return;
 
-    const newRestriction = { person1: p1, person2: p2 };
+    const newRestriction = { person1, person2 };
 
     // Check if restriction already exists (both directions)
     const exists = restrictions.some(
       (r) =>
-        (r.person1 === p1 && r.person2 === p2) ||
-        (r.person1 === p2 && r.person2 === p1)
+        (r.person1 === person1 && r.person2 === person2) ||
+        (r.person1 === person2 && r.person2 === person1)
     );
 
     if (!exists) {
       setRestrictions((prev) => [...prev, newRestriction]);
       setCurrentRestriction({ person1: "", person2: "" });
     }
-  }, [debouncedRestriction, names, restrictions]);
+  }, [currentRestriction, names, restrictions]);
 
   const removeRestriction = useCallback((index) => {
     setRestrictions((prev) => prev.filter((_, i) => i !== index));
@@ -156,16 +160,6 @@ const App = () => {
     setGroups(bestGroups);
   }, [names, groupSize, restrictions, canGenerateGroups]);
 
-  // Handle Enter key for restriction inputs
-  const handleRestrictionKeyPress = useCallback(
-    (e) => {
-      if (e.key === "Enter") {
-        addRestriction();
-      }
-    },
-    [addRestriction]
-  );
-
   // Group size handlers
   const incrementGroupSize = useCallback(() => {
     setGroupSize((prev) => Math.min(prev + 1, maxGroupSize));
@@ -175,22 +169,23 @@ const App = () => {
     setGroupSize((prev) => Math.max(prev - 1, 2));
   }, []);
 
-  const handleGroupSizeChange = useCallback(
-    (e) => {
-      const value = parseInt(e.target.value);
-      if (value >= 2 && value <= maxGroupSize) {
-        setGroupSize(value);
-      }
-    },
-    [maxGroupSize]
-  );
-
   // Reset groups when names or restrictions change
   useEffect(() => {
     if (groups.length > 0) {
       setGroups([]);
     }
   }, [names, restrictions, groupSize]);
+
+  // Check if restriction can be added
+  const canAddRestriction = useMemo(() => {
+    const { person1, person2 } = currentRestriction;
+    return person1 && person2 && person1 !== person2 &&
+           names.includes(person1) && names.includes(person2) &&
+           !restrictions.some(r => 
+             (r.person1 === person1 && r.person2 === person2) ||
+             (r.person1 === person2 && r.person2 === person1)
+           );
+  }, [currentRestriction, names, restrictions]);
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4">
@@ -256,7 +251,7 @@ const App = () => {
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ delay: Math.min(index * 0.03, 0.3) }} // Cap delay for performance
+                        transition={{ delay: Math.min(index * 0.03, 0.3) }}
                         layout
                       >
                         <Badge
@@ -298,7 +293,7 @@ const App = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Prettier Group Size Selector */}
+                {/* Group Size Selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">group size:</label>
                   <div className="flex items-center gap-3">
@@ -334,6 +329,7 @@ const App = () => {
                     variant="outline"
                     onClick={() => setShowRestrictions(!showRestrictions)}
                     className="w-full"
+                    disabled={names.length < 2}
                   >
                     {showRestrictions ? "hide" : "add"} restrictions
                   </Button>
@@ -347,57 +343,57 @@ const App = () => {
                         className="space-y-3 pt-2 overflow-hidden"
                       >
                         <div className="flex gap-2">
-                          <Input
-                            placeholder="person 1..."
+                          <Select
                             value={currentRestriction.person1}
-                            onChange={(e) =>
+                            onValueChange={(value) =>
                               setCurrentRestriction({
                                 ...currentRestriction,
-                                person1: e.target.value,
+                                person1: value,
                               })
                             }
-                            onKeyPress={handleRestrictionKeyPress}
-                            className="flex-1"
-                          />
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="select person 1..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableNamesForPerson1.map((name) => (
+                                <SelectItem key={name} value={name}>
+                                  {name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
                           <span className="flex items-center text-muted-foreground">
                             ≠
                           </span>
-                          <Input
-                            placeholder="person 2..."
+                          
+                          <Select
                             value={currentRestriction.person2}
-                            onChange={(e) =>
+                            onValueChange={(value) =>
                               setCurrentRestriction({
                                 ...currentRestriction,
-                                person2: e.target.value,
+                                person2: value,
                               })
                             }
-                            onKeyPress={handleRestrictionKeyPress}
-                            className="flex-1"
-                          />
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="select person 2..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableNamesForPerson2.map((name) => (
+                                <SelectItem key={name} value={name}>
+                                  {name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
                           <Button
                             onClick={addRestriction}
                             size="icon"
                             variant="outline"
-                            disabled={
-                              !debouncedRestriction.person1.trim() ||
-                              !debouncedRestriction.person2.trim() ||
-                              !names.includes(
-                                debouncedRestriction.person1
-                                  .trim()
-                                  .toLowerCase()
-                              ) ||
-                              !names.includes(
-                                debouncedRestriction.person2
-                                  .trim()
-                                  .toLowerCase()
-                              ) ||
-                              debouncedRestriction.person1
-                                .trim()
-                                .toLowerCase() ===
-                                debouncedRestriction.person2
-                                  .trim()
-                                  .toLowerCase()
-                            }
+                            disabled={!canAddRestriction}
                           >
                             <FiPlus className="w-4 h-4" />
                           </Button>
