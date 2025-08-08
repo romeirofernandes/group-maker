@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiPlus,
@@ -38,6 +44,9 @@ const App = () => {
   const [groups, setGroups] = useState([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
 
+  // Ref for the generated groups section
+  const groupsRef = useRef(null);
+
   // Memoized calculations for better performance
   const canGenerateGroups = useMemo(() => {
     return names.length >= 2 && names.length % groupSize === 0;
@@ -59,11 +68,11 @@ const App = () => {
 
   // Available names for restrictions (excluding already selected ones)
   const availableNamesForPerson1 = useMemo(() => {
-    return names.filter(name => name !== currentRestriction.person2);
+    return names.filter((name) => name !== currentRestriction.person2);
   }, [names, currentRestriction.person2]);
 
   const availableNamesForPerson2 = useMemo(() => {
-    return names.filter(name => name !== currentRestriction.person1);
+    return names.filter((name) => name !== currentRestriction.person1);
   }, [names, currentRestriction.person1]);
 
   // Optimized addName function
@@ -94,7 +103,7 @@ const App = () => {
   // Optimized addRestriction function with better validation
   const addRestriction = useCallback(() => {
     const { person1, person2 } = currentRestriction;
-    
+
     // Enhanced validation
     if (!person1 || !person2) return;
     if (!names.includes(person1) || !names.includes(person2)) return;
@@ -158,6 +167,11 @@ const App = () => {
     }
 
     setGroups(bestGroups);
+
+    // Scroll to the generated groups section
+    setTimeout(() => {
+      groupsRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100); // Small delay to ensure groups are rendered before scrolling
   }, [names, groupSize, restrictions, canGenerateGroups]);
 
   // Group size handlers
@@ -179,12 +193,18 @@ const App = () => {
   // Check if restriction can be added
   const canAddRestriction = useMemo(() => {
     const { person1, person2 } = currentRestriction;
-    return person1 && person2 && person1 !== person2 &&
-           names.includes(person1) && names.includes(person2) &&
-           !restrictions.some(r => 
-             (r.person1 === person1 && r.person2 === person2) ||
-             (r.person1 === person2 && r.person2 === person1)
-           );
+    return (
+      person1 &&
+      person2 &&
+      person1 !== person2 &&
+      names.includes(person1) &&
+      names.includes(person2) &&
+      !restrictions.some(
+        (r) =>
+          (r.person1 === person1 && r.person2 === person2) ||
+          (r.person1 === person2 && r.person2 === person1)
+      )
+    );
   }, [currentRestriction, names, restrictions]);
 
   return (
@@ -196,7 +216,7 @@ const App = () => {
           animate={{ opacity: 1, y: 0 }}
           className="text-center space-y-4"
         >
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
+          <h1 className="text-4xl md:text-5xl mt-8 font-bold tracking-tight">
             f*ck groups.
           </h1>
           <p className="text-muted-foreground text-lg">
@@ -363,11 +383,11 @@ const App = () => {
                               ))}
                             </SelectContent>
                           </Select>
-                          
+
                           <span className="flex items-center text-muted-foreground">
                             ≠
                           </span>
-                          
+
                           <Select
                             value={currentRestriction.person2}
                             onValueChange={(value) =>
@@ -388,7 +408,7 @@ const App = () => {
                               ))}
                             </SelectContent>
                           </Select>
-                          
+
                           <Button
                             onClick={addRestriction}
                             size="icon"
@@ -467,6 +487,7 @@ const App = () => {
         <AnimatePresence>
           {groups.length > 0 && (
             <motion.div
+              ref={groupsRef} // Attach the ref here
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -40 }}
