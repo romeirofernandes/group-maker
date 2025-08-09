@@ -459,7 +459,7 @@ const App = () => {
                               <SelectValue
                                 placeholder={
                                   !currentRestriction.person1
-                                    ? "select person 1 first"
+                                    ? "select person 1"
                                     : availableNamesForPerson2.length === 0
                                     ? "no valid pairs"
                                     : window.innerWidth <= 768
