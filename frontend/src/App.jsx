@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Toaster, toast } from "sonner";
 
 const App = () => {
   const [names, setNames] = useState([]);
@@ -44,10 +45,8 @@ const App = () => {
   const [groups, setGroups] = useState([]);
   const [showRestrictions, setShowRestrictions] = useState(false);
 
-  // Ref for the generated groups section
   const groupsRef = useRef(null);
 
-  // Memoized calculations for better performance
   const canGenerateGroups = useMemo(() => {
     return names.length >= 2 && names.length % groupSize === 0;
   }, [names.length, groupSize]);
@@ -66,7 +65,6 @@ const App = () => {
     return remainder === 0 ? 0 : groupSize - remainder;
   }, [names.length, groupSize]);
 
-  // Available names for restrictions (excluding already selected ones)
   const availableNamesForPerson1 = useMemo(() => {
     return names.filter((name) => name !== currentRestriction.person2);
   }, [names, currentRestriction.person2]);
@@ -75,7 +73,6 @@ const App = () => {
     return names.filter((name) => name !== currentRestriction.person1);
   }, [names, currentRestriction.person1]);
 
-  // Optimized addName function
   const addName = useCallback(() => {
     const trimmedName = currentName.trim().toLowerCase();
     if (trimmedName && !names.includes(trimmedName)) {
@@ -84,34 +81,26 @@ const App = () => {
     }
   }, [currentName, names]);
 
-  // Optimized removeName function
   const removeName = useCallback((nameToRemove) => {
     setNames((prev) => prev.filter((name) => name !== nameToRemove));
-    // Remove restrictions involving this person
     setRestrictions((prev) =>
       prev.filter(
         (r) => r.person1 !== nameToRemove && r.person2 !== nameToRemove
       )
     );
-    // Clear current restriction if it involves the removed person
     setCurrentRestriction((prev) => ({
       person1: prev.person1 === nameToRemove ? "" : prev.person1,
       person2: prev.person2 === nameToRemove ? "" : prev.person2,
     }));
   }, []);
 
-  // Optimized addRestriction function with better validation
   const addRestriction = useCallback(() => {
     const { person1, person2 } = currentRestriction;
-
-    // Enhanced validation
     if (!person1 || !person2) return;
     if (!names.includes(person1) || !names.includes(person2)) return;
     if (person1 === person2) return;
 
     const newRestriction = { person1, person2 };
-
-    // Check if restriction already exists (both directions)
     const exists = restrictions.some(
       (r) =>
         (r.person1 === person1 && r.person2 === person2) ||
@@ -128,12 +117,24 @@ const App = () => {
     setRestrictions((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Improved group generation algorithm with better constraint handling
   const generateGroups = useCallback(() => {
     if (!canGenerateGroups) return;
 
+    if (
+      names.length === 2 &&
+      groupSize === 2 &&
+      restrictions.some(
+        (r) =>
+          (r.person1 === names[0] && r.person2 === names[1]) ||
+          (r.person1 === names[1] && r.person2 === names[0])
+      )
+    ) {
+      toast.error("Cannot generate groups: restrictions make it impossible.");
+      return;
+    }
+
     let attempts = 0;
-    const maxAttempts = 100; // Prevent infinite loops
+    const maxAttempts = 100;
     let bestGroups = [];
     let bestViolations = Infinity;
 
@@ -144,8 +145,6 @@ const App = () => {
 
       for (let i = 0; i < shuffled.length; i += groupSize) {
         const group = shuffled.slice(i, i + groupSize);
-
-        // Count violations in this group
         const groupViolations = restrictions.filter(
           (r) => group.includes(r.person1) && group.includes(r.person2)
         ).length;
@@ -154,13 +153,11 @@ const App = () => {
         newGroups.push(group);
       }
 
-      // Keep the best result so far
       if (violations < bestViolations) {
         bestViolations = violations;
         bestGroups = newGroups;
       }
 
-      // If we found a perfect solution, use it
       if (violations === 0) break;
 
       attempts++;
@@ -168,13 +165,11 @@ const App = () => {
 
     setGroups(bestGroups);
 
-    // Scroll to the generated groups section
     setTimeout(() => {
       groupsRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100); // Small delay to ensure groups are rendered before scrolling
+    }, 100);
   }, [names, groupSize, restrictions, canGenerateGroups]);
 
-  // Group size handlers
   const incrementGroupSize = useCallback(() => {
     setGroupSize((prev) => Math.min(prev + 1, maxGroupSize));
   }, [maxGroupSize]);
@@ -183,14 +178,12 @@ const App = () => {
     setGroupSize((prev) => Math.max(prev - 1, 2));
   }, []);
 
-  // Reset groups when names or restrictions change
   useEffect(() => {
     if (groups.length > 0) {
       setGroups([]);
     }
   }, [names, restrictions, groupSize]);
 
-  // Check if restriction can be added
   const canAddRestriction = useMemo(() => {
     const { person1, person2 } = currentRestriction;
     return (
@@ -209,8 +202,19 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: "#262626",
+            color: "#f5f5f7",
+            border: "1px solid #404040", 
+            borderRadius: "3px",
+            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+          },
+        }}
+      />
       <div className="mx-auto max-w-3xl space-y-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -224,7 +228,6 @@ const App = () => {
           </p>
         </motion.div>
 
-        {/* Name Input */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -295,7 +298,6 @@ const App = () => {
           </Card>
         </motion.div>
 
-        {/* Group Settings */}
         {names.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -313,7 +315,6 @@ const App = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Group Size Selector */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">group size:</label>
                   <div className="flex items-center gap-3">
@@ -373,7 +374,13 @@ const App = () => {
                             }
                           >
                             <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="select person 1..." />
+                              <SelectValue
+                                placeholder={
+                                  window.innerWidth <= 768
+                                    ? "person 1"
+                                    : "select person 1..."
+                                }
+                              />
                             </SelectTrigger>
                             <SelectContent>
                               {availableNamesForPerson1.map((name) => (
@@ -398,7 +405,13 @@ const App = () => {
                             }
                           >
                             <SelectTrigger className="flex-1">
-                              <SelectValue placeholder="select person 2..." />
+                              <SelectValue
+                                placeholder={
+                                  window.innerWidth <= 768
+                                    ? "person 2"
+                                    : "select person 2..."
+                                }
+                              />
                             </SelectTrigger>
                             <SelectContent>
                               {availableNamesForPerson2.map((name) => (
@@ -459,7 +472,6 @@ const App = () => {
           </motion.div>
         )}
 
-        {/* Generate Button */}
         {names.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -483,11 +495,10 @@ const App = () => {
           </motion.div>
         )}
 
-        {/* Generated Groups */}
         <AnimatePresence>
           {groups.length > 0 && (
             <motion.div
-              ref={groupsRef} // Attach the ref here
+              ref={groupsRef}
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -40 }}

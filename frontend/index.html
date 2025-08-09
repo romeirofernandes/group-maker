@@ -1,10 +1,36 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <title>make groups</title>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 48;
+        canvas.height = 48;
+        const ctx = canvas.getContext("2d");
+
+        const primary = "#737373";
+        const secondary = "#262626";
+        const accent = "#404040";
+
+        const gradient = ctx.createLinearGradient(0, 0, 48, 48);
+        gradient.addColorStop(0, primary);
+        gradient.addColorStop(0.5, secondary);
+        gradient.addColorStop(1, accent);
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(24, 24, 24, 0, Math.PI * 2);
+        ctx.fill();
+
+        const link = document.createElement("link");
+        link.rel = "icon";
+        link.href = canvas.toDataURL("image/png");
+        document.head.appendChild(link);
+      });
+    </script>
   </head>
   <body class="dark">
     <div id="root"></div>
