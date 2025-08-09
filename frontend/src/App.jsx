@@ -13,6 +13,8 @@ import {
   FiShuffle,
   FiSettings,
   FiMinus,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,8 +44,10 @@ const App = () => {
     person1: "",
     person2: "",
   });
-  const [groups, setGroups] = useState([]);
+  const [allCombinations, setAllCombinations] = useState([]);
+  const [currentCombinationIndex, setCombinationIndex] = useState(0);
   const [showRestrictions, setShowRestrictions] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const groupsRef = useRef(null);
 
@@ -70,8 +74,17 @@ const App = () => {
   }, [names, currentRestriction.person2]);
 
   const availableNamesForPerson2 = useMemo(() => {
-    return names.filter((name) => name !== currentRestriction.person1);
-  }, [names, currentRestriction.person1]);
+    if (!currentRestriction.person1) return [];
+    return names.filter((name) => {
+      if (name === currentRestriction.person1) return false;
+      const pairExists = restrictions.some(
+        (r) =>
+          (r.person1 === currentRestriction.person1 && r.person2 === name) ||
+          (r.person1 === name && r.person2 === currentRestriction.person1)
+      );
+      return !pairExists;
+    });
+  }, [names, currentRestriction.person1, restrictions]);
 
   const addName = useCallback(() => {
     const trimmedName = currentName.trim().toLowerCase();
@@ -94,79 +107,129 @@ const App = () => {
     }));
   }, []);
 
-  const addRestriction = useCallback(() => {
+  useEffect(() => {
     const { person1, person2 } = currentRestriction;
-    if (!person1 || !person2) return;
-    if (!names.includes(person1) || !names.includes(person2)) return;
-    if (person1 === person2) return;
-
-    const newRestriction = { person1, person2 };
-    const exists = restrictions.some(
-      (r) =>
-        (r.person1 === person1 && r.person2 === person2) ||
-        (r.person1 === person2 && r.person2 === person1)
-    );
-
-    if (!exists) {
-      setRestrictions((prev) => [...prev, newRestriction]);
-      setCurrentRestriction({ person1: "", person2: "" });
+    if (person1 && person2 && person1 !== person2) {
+      const exists = restrictions.some(
+        (r) =>
+          (r.person1 === person1 && r.person2 === person2) ||
+          (r.person1 === person2 && r.person2 === person1)
+      );
+      if (!exists) {
+        setRestrictions((prev) => [...prev, { person1, person2 }]);
+        setCurrentRestriction({ person1: "", person2: "" });
+      }
     }
-  }, [currentRestriction, names, restrictions]);
+  }, [currentRestriction, restrictions]);
 
   const removeRestriction = useCallback((index) => {
     setRestrictions((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const generateGroups = useCallback(() => {
+  const generateAllCombinations = useCallback(() => {
     if (!canGenerateGroups) return;
 
-    if (
-      names.length === 2 &&
-      groupSize === 2 &&
-      restrictions.some(
-        (r) =>
-          (r.person1 === names[0] && r.person2 === names[1]) ||
-          (r.person1 === names[1] && r.person2 === names[0])
-      )
-    ) {
-      toast.error("Cannot generate groups: restrictions make it impossible.");
-      return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 100;
-    let bestGroups = [];
-    let bestViolations = Infinity;
-
-    while (attempts < maxAttempts) {
-      const shuffled = [...names].sort(() => Math.random() - 0.5);
-      const newGroups = [];
-      let violations = 0;
-
-      for (let i = 0; i < shuffled.length; i += groupSize) {
-        const group = shuffled.slice(i, i + groupSize);
-        const groupViolations = restrictions.filter(
-          (r) => group.includes(r.person1) && group.includes(r.person2)
-        ).length;
-
-        violations += groupViolations;
-        newGroups.push(group);
-      }
-
-      if (violations < bestViolations) {
-        bestViolations = violations;
-        bestGroups = newGroups;
-      }
-
-      if (violations === 0) break;
-
-      attempts++;
-    }
-
-    setGroups(bestGroups);
+    setIsGenerating(true);
 
     setTimeout(() => {
-      groupsRef.current?.scrollIntoView({ behavior: "smooth" });
+      const namesList = [...names];
+      const combinations = [];
+      const maxCombinations = 1000;
+
+      function generateGroupCombinations(people, groupSize) {
+        if (people.length === 0) return [[]];
+        if (people.length % groupSize !== 0) return [];
+
+        const result = [];
+        const firstPerson = people[0];
+        const remainingPeople = people.slice(1);
+
+        function getCombinations(arr, size) {
+          if (size === 1) return arr.map((item) => [item]);
+          if (size > arr.length) return [];
+          const combinations = [];
+          for (let i = 0; i <= arr.length - size; i++) {
+            const head = arr[i];
+            const tailCombinations = getCombinations(
+              arr.slice(i + 1),
+              size - 1
+            );
+            tailCombinations.forEach((tail) =>
+              combinations.push([head, ...tail])
+            );
+          }
+          return combinations;
+        }
+
+        const possibleGroupmates = getCombinations(
+          remainingPeople,
+          groupSize - 1
+        );
+
+        for (const groupmates of possibleGroupmates) {
+          const currentGroup = [firstPerson, ...groupmates].sort();
+          const leftoverPeople = remainingPeople.filter(
+            (person) => !groupmates.includes(person)
+          );
+          const remainingCombinations = generateGroupCombinations(
+            leftoverPeople,
+            groupSize
+          );
+          for (const remainingGroups of remainingCombinations) {
+            const fullCombination = [currentGroup, ...remainingGroups].sort(
+              (a, b) => {
+                return a[0].localeCompare(b[0]);
+              }
+            );
+            result.push(fullCombination);
+          }
+        }
+
+        return result;
+      }
+
+      function hasViolations(groups) {
+        return restrictions.some((restriction) =>
+          groups.some(
+            (group) =>
+              group.includes(restriction.person1) &&
+              group.includes(restriction.person2)
+          )
+        );
+      }
+
+      const allCombinations = generateGroupCombinations(
+        namesList.sort(),
+        groupSize
+      );
+      const validCombinations = allCombinations
+        .filter((combination) => !hasViolations(combination))
+        .slice(0, maxCombinations);
+
+      if (allCombinations.length > maxCombinations) {
+        toast.warning(
+          `Limited to ${maxCombinations} combinations to prevent browser freeze. Found ${allCombinations.length} total.`
+        );
+      }
+
+      if (validCombinations.length === 0) {
+        toast.error("No valid combinations found with current restrictions.");
+        setAllCombinations([]);
+      } else {
+        setAllCombinations(validCombinations);
+        setCombinationIndex(0);
+        toast.success(
+          `Found ${validCombinations.length} valid combination${
+            validCombinations.length !== 1 ? "s" : ""
+          }!`
+        );
+
+        setTimeout(() => {
+          groupsRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 100);
+      }
+
+      setIsGenerating(false);
     }, 100);
   }, [names, groupSize, restrictions, canGenerateGroups]);
 
@@ -179,26 +242,13 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (groups.length > 0) {
-      setGroups([]);
+    if (allCombinations.length > 0) {
+      setAllCombinations([]);
+      setCombinationIndex(0);
     }
   }, [names, restrictions, groupSize]);
 
-  const canAddRestriction = useMemo(() => {
-    const { person1, person2 } = currentRestriction;
-    return (
-      person1 &&
-      person2 &&
-      person1 !== person2 &&
-      names.includes(person1) &&
-      names.includes(person2) &&
-      !restrictions.some(
-        (r) =>
-          (r.person1 === person1 && r.person2 === person2) ||
-          (r.person1 === person2 && r.person2 === person1)
-      )
-    );
-  }, [currentRestriction, names, restrictions]);
+  const currentGroups = allCombinations[currentCombinationIndex] || [];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4">
@@ -208,7 +258,7 @@ const App = () => {
           style: {
             background: "#262626",
             color: "#f5f5f7",
-            border: "1px solid #404040", 
+            border: "1px solid #404040",
             borderRadius: "3px",
             boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
           },
@@ -368,8 +418,8 @@ const App = () => {
                             value={currentRestriction.person1}
                             onValueChange={(value) =>
                               setCurrentRestriction({
-                                ...currentRestriction,
                                 person1: value,
+                                person2: "",
                               })
                             }
                           >
@@ -403,11 +453,16 @@ const App = () => {
                                 person2: value,
                               })
                             }
+                            disabled={!currentRestriction.person1}
                           >
                             <SelectTrigger className="flex-1">
                               <SelectValue
                                 placeholder={
-                                  window.innerWidth <= 768
+                                  !currentRestriction.person1
+                                    ? "select person 1 first"
+                                    : availableNamesForPerson2.length === 0
+                                    ? "no valid pairs"
+                                    : window.innerWidth <= 768
                                     ? "person 2"
                                     : "select person 2..."
                                 }
@@ -421,15 +476,6 @@ const App = () => {
                               ))}
                             </SelectContent>
                           </Select>
-
-                          <Button
-                            onClick={addRestriction}
-                            size="icon"
-                            variant="outline"
-                            disabled={!canAddRestriction}
-                          >
-                            <FiPlus className="w-4 h-4" />
-                          </Button>
                         </div>
 
                         {restrictions.length > 0 && (
@@ -480,14 +526,16 @@ const App = () => {
             className="flex justify-center"
           >
             <Button
-              onClick={generateGroups}
-              disabled={!canGenerateGroups}
+              onClick={generateAllCombinations}
+              disabled={!canGenerateGroups || isGenerating}
               size="lg"
               className="text-lg px-8"
             >
               <FiShuffle className="w-5 h-5 mr-2" />
-              {canGenerateGroups
-                ? "generate groups"
+              {isGenerating
+                ? "generating..."
+                : canGenerateGroups
+                ? "generate all combinations"
                 : missingNames > 0
                 ? `need ${missingNames} more names`
                 : "add more names"}
@@ -496,7 +544,7 @@ const App = () => {
         )}
 
         <AnimatePresence>
-          {groups.length > 0 && (
+          {allCombinations.length > 0 && (
             <motion.div
               ref={groupsRef}
               initial={{ opacity: 0, y: 40 }}
@@ -504,14 +552,49 @@ const App = () => {
               exit={{ opacity: 0, y: -40 }}
               className="space-y-4"
             >
-              <h2 className="text-2xl font-bold text-center">
-                your groups are ready
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold">
+                  combination {currentCombinationIndex + 1} of{" "}
+                  {allCombinations.length}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setCombinationIndex(
+                        Math.max(0, currentCombinationIndex - 1)
+                      )
+                    }
+                    disabled={currentCombinationIndex === 0}
+                  >
+                    <FiChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setCombinationIndex(
+                        Math.min(
+                          allCombinations.length - 1,
+                          currentCombinationIndex + 1
+                        )
+                      )
+                    }
+                    disabled={
+                      currentCombinationIndex === allCombinations.length - 1
+                    }
+                  >
+                    <FiChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <AnimatePresence mode="popLayout">
-                  {groups.map((group, index) => (
+                  {currentGroups.map((group, index) => (
                     <motion.div
-                      key={index}
+                      key={`${currentCombinationIndex}-${index}`}
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: Math.min(index * 0.05, 0.2) }}
@@ -551,13 +634,6 @@ const App = () => {
                     </motion.div>
                   ))}
                 </AnimatePresence>
-              </div>
-
-              <div className="flex justify-center">
-                <Button onClick={generateGroups} variant="outline">
-                  <FiShuffle className="w-4 h-4 mr-2" />
-                  shuffle again
-                </Button>
               </div>
             </motion.div>
           )}
